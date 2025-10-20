@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Users, LogOut } from "lucide-react";
 import LoadingScreen from "@/components/LoadingScreen";
 import React, { useEffect } from "react";
+import { config } from "@/config/runtime-config";
 
 
 
@@ -118,15 +119,15 @@ const PatientSearch = () => {
           },
           {
             name: "count",
-            valueInteger: parseInt(import.meta.env.VITE_PATIENT_MATCH_COUNT || "1")
+            valueInteger: config.patientMatchCount
           },
           {
             name: "onlyCertainMatches",
-            valueBoolean: import.meta.env.VITE_PATIENT_MATCH_ONLY_CERTAIN_MATCH === "true"
+            valueBoolean: config.patientMatchOnlyCertainMatch
           },
           {
             name: "onlySingleMatch",
-            valueBoolean: import.meta.env.VITE_PATIENT_MATCH_ONLY_SINGLE_MATCH === "true"
+            valueBoolean: config.patientMatchOnlySingleMatch
           }
         ]
       };

@@ -19,13 +19,14 @@ import App from "./App.tsx";
 import "./index.css";
 import { StrictMode } from "react";
 import { AuthProvider } from "@asgardeo/auth-react";
+import { config } from "./config/runtime-config";
 
-const config = {
-  signInRedirectURL: import.meta.env.VITE_REACT_APP_REDIRECT_URL || window.location.origin,
-  signOutRedirectURL: import.meta.env.VITE_REACT_APP_REDIRECT_URL || window.location.origin,
-  clientID: import.meta.env.VITE_REACT_APP_ASGARDEO_CLIENT_ID,
-  clientSecret: import.meta.env.VITE_REACT_APP_ASGARDEO_CLIENT_SECRET,
-  baseUrl: import.meta.env.VITE_REACT_APP_ASGARDEO_BASE_URL,
+const authConfig = {
+  signInRedirectURL: config.asgardeo.redirectUrl || window.location.origin,
+  signOutRedirectURL: config.asgardeo.redirectUrl || window.location.origin,
+  clientID: config.asgardeo.clientId,
+  clientSecret: config.asgardeo.clientSecret,
+  baseUrl: config.asgardeo.baseUrl,
   scope: ["openid", "profile", "email", "patient.read"],
   grantType: "client_credentials",
   enablePKCE: true,
@@ -34,7 +35,7 @@ const config = {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AuthProvider config={config}>
+    <AuthProvider config={authConfig}>
       <App />
     </AuthProvider>
   </StrictMode>
