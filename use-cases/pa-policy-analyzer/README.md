@@ -10,11 +10,12 @@ A user can browse patient records, onboard payer coverage policies from PDFs, an
 | [bff](bff/) | Ballerina Swan Lake 2201.13.3 | Backend-for-frontend -- EMR proxy, payer onboarding pipeline, policy/code lookup, evaluation orchestration |
 | [pa-eval-agent](pa-eval-agent/) | Ballerina Swan Lake 2201.13.3 | AI agent that evaluates patient clinical data against policy clauses using Claude |
 | [pdf-md-service](pdf-md-service/) | Python | PDF-to-Markdown conversion service used by the payer onboarding pipeline |
+| [mock-policy-document-service](mock-policy-document-service/) | Ballerina Swan Lake 2201.13.1 | Mock HTTP service that serves payer policy PDFs for the onboarding pipeline. In a real deployment this would be configured against the actual payer document APIs -- here it stands in as a stub for the demo. |
 
 ## Prerequisites
 
 - **Node.js** 20+
-- **Ballerina** Swan Lake 2201.13.3+
+- **Ballerina** Swan Lake 2201.13.1+
 - **MySQL** 8+
 - Access to a **Cerner FHIR R4** sandbox (or production tenant)
 - An **Anthropic API key**
