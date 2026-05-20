@@ -1,4 +1,4 @@
-const BFF_BASE = 'http://localhost:6091/v1';
+const BFF_BASE = window.config?.BFF_BASE || 'http://localhost:6091/v1';
 
 export async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(`${BFF_BASE}${path}`);

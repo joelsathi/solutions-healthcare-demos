@@ -161,7 +161,7 @@ export function NewEvaluationPage({ onNavigate }: NewEvaluationPageProps) {
               (evalData as { _raw_status?: string })._raw_status !== 'in_progress') {
             // Check if the raw status from the API is no longer in_progress
             // The mapper maps in_progress to pending_review, so we need the actual status
-            const raw = await fetch(`http://localhost:6091/v1/evaluations/${evalId}`);
+            const raw = await fetch(`${window.config?.EVAL_AGENT_URL || 'http://localhost:6091/v1/evaluations'}/${evalId}`);
             const rawData = await raw.json();
             if (rawData.status !== 'in_progress') {
               evalDone = true;
