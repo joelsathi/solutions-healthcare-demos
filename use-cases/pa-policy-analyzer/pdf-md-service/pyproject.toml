@@ -8,4 +8,5 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pymupdf4llm>=0.0.17",
+    "python-multipart>=0.0.9",
 ]
