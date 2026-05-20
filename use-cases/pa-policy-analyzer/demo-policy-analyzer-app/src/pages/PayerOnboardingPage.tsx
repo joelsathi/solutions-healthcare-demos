@@ -25,7 +25,6 @@ import {
 import {
   startOnboarding,
   fetchOnboardingStatus,
-  resyncPayer,
   type OnboardingStatus,
   type PdfEntry,
 } from '../api/payerOnboarding';
@@ -66,7 +65,7 @@ const FETCH_STEPS: { label: string; detail: string; icon: React.ReactNode }[] = 
 ];
 
 // Map backend job status to which fetch step is active/done.
-function stepStatusesFromJob(status: OnboardingStatus['status'], stepIndex: number): StepStatus[] {
+function stepStatusesFromJob(status: OnboardingStatus['status']): StepStatus[] {
   if (['converting', 'done', 'fetching'].includes(status)) return ['done', 'done', 'done'];
   if (status === 'scanning') return ['done', 'done', 'running'];
   if (status === 'authenticating') return ['done', 'running', 'pending'];
@@ -96,7 +95,6 @@ export function PayerOnboardingPage({ onNavigate }: PayerOnboardingPageProps) {
   const [fetchStepStatuses, setFetchStepStatuses] = useState<StepStatus[]>(['pending', 'pending', 'pending']);
   const [convertingProgress, setConvertingProgress] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
-  const [lastPayerId, setLastPayerId] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const jobIdRef = useRef<string | null>(null);
@@ -115,7 +113,7 @@ export function PayerOnboardingPage({ onNavigate }: PayerOnboardingPageProps) {
   };
 
   const applyStatus = (s: OnboardingStatus) => {
-    const steps = stepStatusesFromJob(s.status, s.stepIndex);
+    const steps = stepStatusesFromJob(s.status);
     setFetchStepStatuses(steps);
     setApiPdfs(s.pdfs);
     setSkippedCount(s.skippedCount ?? 0);

@@ -25,7 +25,7 @@ export async function fetchPatientList(): Promise<PatientListItem[]> {
 /** Fetch a lightweight patient summary (demographics only) via FHIR _summary=true. */
 export async function fetchPatientSummary(id: string): Promise<PatientBase> {
   const fhirPatient = await apiFetch<Record<string, unknown>>('/patientSummary', { id });
-  return mapFHIRPatientBase(fhirPatient as Parameters<typeof mapFHIRPatientBase>[0]);
+  return mapFHIRPatientBase(fhirPatient as unknown as Parameters<typeof mapFHIRPatientBase>[0]);
 }
 
 /** Fetch a single FHIR resource bundle for a patient. Returns empty bundle on error. */
@@ -53,7 +53,7 @@ export async function fetchPatient(id: string): Promise<Patient> {
     fetchResourceBundle(id, 'DocumentReference'),
   ]);
 
-  const base = mapFHIRPatientBase(fhirPatient as Parameters<typeof mapFHIRPatientBase>[0]);
+  const base = mapFHIRPatientBase(fhirPatient as unknown as Parameters<typeof mapFHIRPatientBase>[0]);
   const observations = mapFHIRObservations(observationBundle);
   const medications = mapFHIRMedications(medicationBundle);
   const procedures = mapFHIRProcedures(procedureBundle);
