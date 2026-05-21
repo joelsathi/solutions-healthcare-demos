@@ -34,7 +34,7 @@ WORKDIR /app
 
 COPY --from=builder --chown=${APP_UID}:${APP_GID} /app /app
 
-USER ${APP_UID}:${APP_GID}
+USER 10014
 
 EXPOSE 6093
 
