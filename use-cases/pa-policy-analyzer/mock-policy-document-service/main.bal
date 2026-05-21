@@ -5,7 +5,7 @@ import ballerina/file;
 
 listener http:Listener pdfServiceListener = new (6092);
 
-const string POLICIES_DIR = "./policies/";
+configurable string POLICIES_DIR = "./policies/";
 const string MOCK_API_KEY = "mock-api-key-12345";
 
 @http:ServiceConfig {
