@@ -25,7 +25,14 @@ service /v1 on bff_listener {
     // ── Cerner EMR Integration ──────────────────────────────────────────────
     isolated resource function get patients() returns map<string>|error {
         do {
-            map<string[]> searchParams = {"_count": ["10"]};
+            // Cerner R4 requires at least one identifying search parameter — open Patient
+            // searches return 400. Query the known sandbox patient IDs from PATIENTS.
+            string idList;
+            lock {
+                idList = string:'join(",", ...PATIENTS.keys());
+            }
+            // Cerner rejects `_count` when `_id` is provided; the ID list bounds the result.
+            map<string[]> searchParams = {"_id": [idList]};
             fhirClient:FHIRResponse fhirResponse = check fhirConnectorObj->search("Patient", searchParameters = searchParams);
 
             json bundleJson = check fhirResponse.'resource.ensureType();
@@ -52,7 +59,7 @@ service /v1 on bff_listener {
             }
             return patients;
         } on fail error e {
-            log:printError("Error fetching patients: " + e.message());
+            log:printError("Error fetching patients: " + e.message(), e, stackTrace = e.stackTrace(), detail = e.detail().toString());
             return error("Failed to retrieve patients");
         }
     }

@@ -37,6 +37,19 @@ configurable string MOCK_PDF_SERVICE_BASE = "http://localhost:6092";
 configurable string CONVERTER_SERVICE_BASE = "http://localhost:6093/v1";
 configurable string STORE_PATH = "./data";
 
+isolated map<string> PATIENTS = {
+    "12724066": "Nancy",
+    "12724067": "Joe",
+    "12724065": "Wilma",
+    "12724071": "Valerie",
+    "12724070": "Fredrick",
+    "12742399": "Sandy",
+    "12724069": "Timmy",
+    "12742397": "Baby Boy",
+    "12724068": "Hailey",
+    "12742400": "Tim"
+};
+
 const string[] MAJOR_SECTION_TITLES = [
     "Application",
     "Coverage Rationale",
