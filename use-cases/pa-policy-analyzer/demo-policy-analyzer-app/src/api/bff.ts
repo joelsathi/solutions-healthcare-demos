@@ -1,7 +1,7 @@
 const BFF_BASE = window.config?.BFF_BASE || 'http://localhost:6091/v1';
 
 export async function apiFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(`${BFF_BASE}${path}`);
+  const url = new URL(`${BFF_BASE}${path}`, window.location.origin);
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
@@ -17,7 +17,7 @@ export function documentProxyUrl(cernerUrl: string): string {
   const parts = cernerUrl.split('/');
   const binaryIdx = parts.indexOf('Binary');
   const id = binaryIdx >= 0 && binaryIdx < parts.length - 1 ? parts[binaryIdx + 1] : parts[parts.length - 1];
-  const url = new URL(`${BFF_BASE}/documentProxy`);
+  const url = new URL(`${BFF_BASE}/documentProxy`, window.location.origin);
   url.searchParams.set('id', id);
   return url.toString();
 }
