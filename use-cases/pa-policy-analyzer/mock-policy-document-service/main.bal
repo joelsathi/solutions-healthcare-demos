@@ -1,12 +1,19 @@
 import ballerina/http;
 import ballerina/log;
-import ballerina/io;
-import ballerina/file;
 
 listener http:Listener pdfServiceListener = new (6092);
 
-configurable string POLICIES_DIR = "./policies/";
 const string MOCK_API_KEY = "mock-api-key-12345";
+const string PDF_FILENAME = "Sample_MRI_Medical_Policy.pdf";
+
+// Public GitHub raw URL for the demo PDF. Swap to a gist raw URL if needed:
+//   https://gist.githubusercontent.com/<user>/<gist_id>/raw/<filename>
+const string PDF_SOURCE_HOST = "https://raw.githubusercontent.com";
+const string PDF_SOURCE_PATH = "/joelsathi/solutions-healthcare-demos/pa-policy-analyzer/use-cases/pa-policy-analyzer/mock-policy-document-service/policies/Sample_MRI_Medical_Policy.pdf";
+
+final http:Client pdfSourceClient = check new (PDF_SOURCE_HOST, {
+    followRedirects: {enabled: true, maxCount: 5}
+});
 
 @http:ServiceConfig {
     cors: {
@@ -27,8 +34,8 @@ service /v1 on pdfServiceListener {
         return {"status": "ok", "service": "mock-pdf-service", "version": "1.0.0"};
     }
 
-    // List all available PDF policy documents
-    resource function get pdfs(http:Request req) returns json|http:Response|error {
+    // List available PDF policy documents
+    resource function get pdfs(http:Request req) returns json|http:Response {
         string|http:HeaderNotFoundError apiKeyHeader = req.getHeader("X-API-Key");
         if apiKeyHeader is string && apiKeyHeader != "" && apiKeyHeader != MOCK_API_KEY {
             http:Response unauthorized = new;
@@ -37,44 +44,19 @@ service /v1 on pdfServiceListener {
             return unauthorized;
         }
 
-        log:printInfo("Listing available PDFs from policies directory");
-
-        file:MetaData[]|file:Error dirEntries = file:readDir(POLICIES_DIR);
-        if dirEntries is file:Error {
-            log:printError("Failed to read policies directory: " + dirEntries.message());
-            return error("Failed to read policies directory: " + dirEntries.message());
-        }
-
-        json[] pdfFiles = [];
-        foreach file:MetaData entry in dirEntries {
-            if !entry.dir {
-                string absPath = entry.absPath;
-                int? lastSlashIdx = absPath.lastIndexOf("/");
-                string filename = lastSlashIdx is int ? absPath.substring(lastSlashIdx + 1) : absPath;
-                if filename.endsWith(".pdf") {
-                    pdfFiles.push({
-                        "filename": filename,
-                        "sizeBytes": entry.size,
-                        "downloadPath": "/v1/pdfs/" + filename
-                    });
+        return {
+            "pdfs": [
+                {
+                    "filename": PDF_FILENAME,
+                    "downloadPath": "/v1/pdfs/" + PDF_FILENAME
                 }
-            }
-        }
-
-        log:printInfo("Found " + pdfFiles.length().toString() + " PDF files");
-        return {"pdfs": pdfFiles, "count": pdfFiles.length()};
+            ],
+            "count": 1
+        };
     }
 
-    // Download a specific PDF by filename
+    // Download a specific PDF by filename (proxied from GitHub)
     resource function get pdfs/[string filename](http:Request req) returns http:Response|error {
-        // Prevent path traversal attacks
-        if filename.includes("..") || filename.includes("/") || filename.includes("\\") {
-            http:Response badRequest = new;
-            badRequest.statusCode = 400;
-            badRequest.setJsonPayload({"error": "Invalid filename"});
-            return badRequest;
-        }
-
         string|http:HeaderNotFoundError apiKeyHeader = req.getHeader("X-API-Key");
         if apiKeyHeader is string && apiKeyHeader != "" && apiKeyHeader != MOCK_API_KEY {
             http:Response unauthorized = new;
@@ -83,25 +65,30 @@ service /v1 on pdfServiceListener {
             return unauthorized;
         }
 
-        string filePath = POLICIES_DIR + filename;
-        boolean|file:Error exists = file:test(filePath, file:EXISTS);
-        if exists is file:Error || !exists {
+        if filename != PDF_FILENAME {
             http:Response notFound = new;
             notFound.statusCode = 404;
             notFound.setJsonPayload({"error": "File not found: " + filename});
             return notFound;
         }
 
-        log:printInfo("Serving PDF: " + filename);
-        byte[]|io:Error fileBytes = io:fileReadBytes(filePath);
-        if fileBytes is io:Error {
-            return error("Failed to read file: " + fileBytes.message());
+        log:printInfo("Fetching PDF from GitHub: " + PDF_SOURCE_HOST + PDF_SOURCE_PATH);
+        http:Response|error upstream = pdfSourceClient->get(PDF_SOURCE_PATH);
+        if upstream is error {
+            return error("Failed to fetch PDF from GitHub: " + upstream.message());
+        }
+        if upstream.statusCode != 200 {
+            return error("GitHub returned status " + upstream.statusCode.toString());
+        }
+
+        byte[]|error fileBytes = upstream.getBinaryPayload();
+        if fileBytes is error {
+            return error("Failed to read PDF bytes: " + fileBytes.message());
         }
 
         http:Response response = new;
-        response.setHeader("Content-Type", "application/pdf");
         response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
-        response.setBinaryPayload(fileBytes);
+        response.setBinaryPayload(fileBytes, "application/pdf");
         return response;
     }
 }
