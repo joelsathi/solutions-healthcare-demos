@@ -11,7 +11,11 @@ function runAgentAsync(string sessionId, string message, string patientName, str
         clinicalSummary = summaryResult;
     }
 
-    string prompt = string `${message}\n\n${clinicalSummary}`;
+    string prompt = string `${message}
+
+Session ID for tool calls: ${sessionId}
+
+${clinicalSummary}`;
 
     string|error result = gapEvalAgent.run(prompt, sessionId);
 

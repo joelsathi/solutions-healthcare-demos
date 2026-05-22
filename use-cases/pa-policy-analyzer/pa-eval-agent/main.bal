@@ -1,5 +1,6 @@
 import ballerina/ai;
 import ballerina/http;
+import ballerina/sql;
 
 listener ai:Listener agentListener = new (listenOn = check http:getDefaultListener());
 
@@ -7,15 +8,16 @@ service /GapEvalAgent on agentListener {
     resource function post chat(@http:Payload ai:ChatReqMessage request) returns ai:ChatRespMessage|error {
         string evalId = request.sessionId;
         EvalParams|error evalParams = dbClient->queryRow(
-            `SELECT patient_id AS patientId, patient_name AS patientName, policy_id AS policyId, cpt_code AS cptCode, 
-                    cpt_description AS cptDescription, payer, status
+            `SELECT patient_id AS patientId, patient_name AS patientName, policy_id AS policyId, cpt_code AS cptCode,
+                    cpt_description AS cptDescription, payer
             FROM evaluations WHERE id = ${evalId}`, EvalParams
         );
 
+        if evalParams is sql:NoRowsError {
+            return { message: "Error: Evaluation not found for ID " + evalId };
+        }
         if evalParams is error {
-            return {
-                message: "Error: Evaluation not found for ID " + evalId
-            };
+            return { message: "Error: Failed to load evaluation " + evalId + ": " + evalParams.message() };
         }
 
         setEvalContext(request.sessionId, {

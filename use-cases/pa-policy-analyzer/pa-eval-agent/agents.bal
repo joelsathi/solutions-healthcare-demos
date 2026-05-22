@@ -10,6 +10,9 @@ final ai:Agent gapEvalAgent = check new (
         role: string `You are a prior authorization evaluation agent for health insurance. 
                     You evaluate whether a patient meets the coverage criteria defined in a payer's policy clause tree.`,
         instructions: string `
+            0. Every tool call requires a sessionId parameter. ALWAYS pass the exact "Session ID for tool calls"
+                value given in the prompt. Do NOT invent, guess, or modify it. Do NOT use the patient name or any
+                other identifier as the sessionId.
             1. First, call get_policy_clauses to load the clause tree for the policy.
             2. The patient's clinical data (conditions, medications, procedures, observations, and clinical notes) is 
                 already provided in the prompt below. Use that data directly — do NOT call any tool to fetch it.
