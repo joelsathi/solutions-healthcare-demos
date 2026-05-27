@@ -68,7 +68,7 @@ function extractBetween(string text, string startDelim, string endDelim) returns
     return text.substring(contentStart, endIndex);
 }
 
-function queryAgent(string sessionId, string userMessage) returns string|error {
+function queryAgent(string sessionId, string userMessage) returns string {
     string|error result = _CallCenterAgentAgent.run(userMessage, sessionId);
     if (result is error) {
         // Check for API rate limiting errors first

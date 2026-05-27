@@ -11,8 +11,8 @@ final anthropic:ModelProvider _CallCenterAgentModel = check new (
 anthropic:ConnectionConfig connectionConfig = {
     secureSocket: {
         cert: {
-            path: "</path/to/client-truststore.jks>",
-            password: "<truststore-password>"
+            path: PATH_TO_CLIENT_TRUSTSTORE,
+            password: TRUSTSTORE_PASSWORD
         }
     }
 };

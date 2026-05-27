@@ -5,7 +5,7 @@ listener ai:Listener CallCenterAgentListener = new (listenOn = check http:getDef
 
 service /CallCenterAgent on CallCenterAgentListener {
     resource function post chat(@http:Payload ai:ChatReqMessage request) returns ai:ChatRespMessage|error {
-        string stringResult = check queryAgent(request.sessionId, request.message);
+        string stringResult = queryAgent(request.sessionId, request.message);
         return {message: stringResult};
     }
 }
