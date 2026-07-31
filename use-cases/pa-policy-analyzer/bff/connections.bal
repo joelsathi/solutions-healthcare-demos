@@ -13,5 +13,5 @@ final mysql:Client dbClient = check new (
     options = {connectTimeout: 10}
 );
 
-final anthropic:ModelProvider anthropicModelprovider = check new (string `${ANTHROPIC_API_KEY}`, "claude-sonnet-4-20250514", maxTokens = 25000);
+final anthropic:ModelProvider anthropicModelprovider = check new (string `${ANTHROPIC_API_KEY}`, "claude-sonnet-4-6", maxTokens = 25000);
 final fhirClient:FHIRConnector fhirConnectorObj = check new (cernerConfig);

@@ -16,7 +16,12 @@ isolated function incrementSortOrder(string sessionId) {
     lock {
         EvalContext? ctx = evalContextMap[sessionId];
         if ctx is EvalContext {
-            ctx.resultSortOrder += 1;
+            evalContextMap[sessionId] = {
+                evaluationId: ctx.evaluationId,
+                patientId: ctx.patientId,
+                policyId: ctx.policyId,
+                resultSortOrder: ctx.resultSortOrder + 1
+            };
         }
     }
 }

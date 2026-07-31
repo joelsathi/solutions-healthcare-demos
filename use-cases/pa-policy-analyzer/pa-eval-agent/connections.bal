@@ -8,7 +8,7 @@ import ballerinax/health.clients.fhir as fhirClient;
 
 configurable string ANTHROPIC_API_KEY = ?;
 
-final anthropic:ModelProvider anthropicModelprovider = check new (string `${ANTHROPIC_API_KEY}`, "claude-sonnet-4-20250514", maxTokens = 40000);
+final anthropic:ModelProvider anthropicModelprovider = check new (string `${ANTHROPIC_API_KEY}`, "claude-sonnet-4-6", maxTokens = 40000);
 
 // ── MySQL Database Client ──────────────────────────────────────────────────────
 
