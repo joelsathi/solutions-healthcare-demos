@@ -4,10 +4,15 @@ import { api, type LabOrder } from '../lib/api'
 import { usePolling } from '../lib/usePolling'
 import { formatTime, parseTimestamp } from '../lib/format'
 import { Badge, Card, CardHeader, Empty, ErrorNote, Spinner } from '../components/ui'
+import { SimulatePanel } from '../components/SimulatePanel'
 
 // Presenter tool: the reference lab's back office (simulated). Orders placed by the integration appear
 // here. "Collect specimen" is the patient arriving for the blood draw — it completes the workflow's
-// "lab visit" human task; "Release results" files the results and resumes the workflow.
+// "lab visit" human task; "Release results" files the results and resumes the workflow. The presenter's
+// failure switches (EHR outage, webhook down, crash) sit beside the orders when SHOW_FAILURE_SWITCHES is on.
+
+// Hidden for now; set to true to show the "Simulate failures" panel again.
+const SHOW_FAILURE_SWITCHES = false
 
 export function LabConsole() {
   const { data: orders, error, refresh } = usePolling(api.labOrders, 3000)
@@ -52,7 +57,8 @@ export function LabConsole() {
         </div>
       )}
       {(error || actionError) && <ErrorNote message={actionError ?? error ?? ''} />}
-      <Card>
+      <div className={`grid gap-5 [&>*]:min-w-0 ${SHOW_FAILURE_SWITCHES ? 'xl:grid-cols-[minmax(0,1fr)_360px]' : ''}`}>
+      <Card className="self-start">
         <CardHeader title="Orders" subtitle="ServiceRequests on the lab FHIR server" icon={<FlaskConical size={16} />} />
         {!orders ? (
           <div className="flex justify-center py-10 text-ink-muted"><Spinner /></div>
@@ -71,7 +77,7 @@ export function LabConsole() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => (
+                {[...orders].sort((a, b) => Number(a.status === 'resulted') - Number(b.status === 'resulted')).map((o) => (
                   <tr key={o.id} className="border-b border-line align-top last:border-0">
                     <td className="px-5 py-3">
                       <p className="font-medium text-ink">{o.patientName}</p>
@@ -87,7 +93,7 @@ export function LabConsole() {
                     <td className="whitespace-nowrap px-3 py-3"><OrderStatus order={o} /></td>
                     <td className="px-5 py-3 text-right">
                       {o.status === 'resulted' ? (
-                        <Badge tone="good"><CheckCircle2 size={12} /> Resulted</Badge>
+                        <span className="text-xs text-ink-muted">{o.reportId ? `DiagnosticReport/${o.reportId.slice(0, 8)}` : 'Done'}</span>
                       ) : o.status === 'awaiting-patient' ? (
                         <button className="btn-secondary py-1.5 text-xs" disabled={!!busy} onClick={() => act(o)}>
                           {busy === o.id ? <Spinner size={13} /> : <Syringe size={13} />} Patient arrived · collect specimen
@@ -105,6 +111,8 @@ export function LabConsole() {
           </div>
         )}
       </Card>
+      {SHOW_FAILURE_SWITCHES && <div className="self-start"><SimulatePanel /></div>}
+      </div>
     </div>
   )
 }

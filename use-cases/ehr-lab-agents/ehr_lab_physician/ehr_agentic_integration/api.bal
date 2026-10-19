@@ -90,7 +90,7 @@ service /api on new http:Listener(apiPort) {
         return {
             ehrs,
             lab: {name: labDisplayName, baseUrl: labFhirBaseUrl},
-            model: {provider: modelProvider, name: anthropicModelName, configured: checkModelConfigured() is ()},
+            model: {provider: modelProvider, name: activeModelName(), configured: checkModelConfigured() is ()},
             workflow: {engine: "Temporal", uiUrl: temporalUiUrl},
             agents: ["Diagnostic Copilot", "Results Analysis", "Care Plan"],
             agentManager: agentManagerView().toJson()
@@ -113,6 +113,20 @@ service /api on new http:Listener(apiPort) {
             return <http:BadRequest>{body: {message: result.message()}};
         }
         return result;
+    }
+
+    # One Patient as the FHIR server returns it and as the Diagnostic Copilot receives it through Agent
+    # Manager's FHIR MCP proxy (mcp-fhir-deidentify). An MCP call only; no model is called.
+    #
+    # + request - `{ehr, patientId}`
+    # + return - both versions, or 400 when the proxies are not configured or the patient cannot be read
+    resource function post agent\-manager/deidentify\-samples(record {|string ehr; string patientId;|} request)
+            returns DeidentifySample|http:BadRequest {
+        DeidentifySample|error sample = deidentifySample(request.ehr, request.patientId);
+        if sample is error {
+            return <http:BadRequest>{body: {message: sample.message()}};
+        }
+        return sample;
     }
 
     # What the agents have used and spent — per agent, run and assessment — priced with the AI gateway's

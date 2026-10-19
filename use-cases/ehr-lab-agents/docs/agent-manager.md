@@ -65,8 +65,8 @@ flowchart LR
 ./scripts/amp-evaluations.sh --backfill 24   # custom evaluators, a monitor per agent, review of the last 24 h
 ```
 
-Console: http://console.amp.localhost:8080 (admin / admin) → project **Longevity Clinic**. Portal:
-http://localhost:5173/agent-manager. Every script is idempotent; keys and secrets are rotated on each run and
+Console: http://console.amp.localhost:8080 (admin / admin) → project **Longevity Clinic**. The portal
+does not show governance; demo it from the console and the scripts. Every script is idempotent; keys and secrets are rotated on each run and
 written to gitignored files (`secrets.toml`, `.amp/`), never printed.
 
 ## 1. Agent identity and permissions
@@ -205,8 +205,7 @@ raise a review — operations raise the budget and press **Retry**, and the asse
 
 **Cost.** AMP's console shows tokens per trace but not money. The trace router keeps a ledger of every agent
 run (tokens from its `chat` spans, the assessment from `gen_ai.conversation.id`), priced with the same gateway
-price list, at `GET /api/agent-manager/usage`. The portal shows spend per agent against its budget, recent runs,
-the AI cost of an assessment, and tokens and cost on each AI step of the workflow.
+price list, at `GET /api/agent-manager/usage` (spend per agent, recent runs, the AI cost of an assessment).
 
 **PHI guardrail.** `amp-guardrails.sh` adds `pii-masking-regex` to the provider with `redactPII: true`, applied
 to the whole request body (`jsonPath: ""`), so the conversation history and the FHIR data in tool results are
@@ -236,6 +235,64 @@ Choices and limits, learned the hard way:
   `azure-content-safety` policies for that.
 - **Traces are recorded agent-side**, so the traces in AMP still contain PHI. Protect the console
   accordingly.
+
+### Cheaper models through OpenRouter
+
+The agents can also run on **DeepSeek V4.1 Flash** (`deepseek/deepseek-v4.1-flash`, $0.047 / $0.12 per M tokens
+in / out against Claude Sonnet 4.6's $3 / $15), through the same AI gateway. Nothing about the Anthropic setup
+changes: OpenRouter is added next to it, and one command switches the agents between the two.
+
+```bash
+# secrets.toml: openrouterApiKey = "sk-or-v1-…"
+./scripts/amp-openrouter.sh            # provider + PHI guardrail, per-agent "openrouter" model configs, budgets, prices
+./scripts/amp-models.sh openrouter     # point the agents at them (back: ./scripts/amp-models.sh claude)
+```
+
+- **Provider `openrouter`:** OpenAI template, upstream `https://openrouter.ai/api/v1`; holds the OpenRouter key and
+  carries the same `pii-masking-regex` guardrail as `anthropic`.
+- **Model configuration `openrouter` per agent:** its own LLM proxy, key and budget, beside the agent's `claude`
+  configuration. `amp-models.sh` issues the agent a key for the chosen one, writes it and the gateway URL into
+  `secrets.toml`, sets `modelProvider` in `config/integration.toml` and restarts the integration.
+- **Prices:** the gateway's price list has neither model, so `amp-openrouter.sh` adds both from OpenRouter's
+  catalogue (under the name OpenRouter answers with). `llm-cost` then prices the calls, and the dollar budgets and
+  the portal's spend work as for Claude.
+- **The integration** uses Ballerina's `ai.openrouter` provider (`modelProvider = "openrouter"`).
+
+Measured on one full assessment (Copilot, Results Analysis, Care Plan): **$0.0072** in all, about 112k tokens.
+
+Getting OpenRouter through Agent Manager 1.0.0 needed three workarounds:
+- **Bearer keys.** The OpenAI-style client can only send `Authorization: Bearer <key>`, and Agent Manager drops the
+  gateway's `valuePrefix` option that would strip `Bearer ` (`ISSUES_TO_REPORT.md` D14). `infra/llm-auth-adapter`,
+  a small Python service, moves the key to `x-api-key` on the way to the gateway (and drops JSON null fields some
+  providers reject), so the OpenRouter proxies check
+  keys exactly as the Claude ones do.
+- **The provider checks `x-api-key`.** Each proxy calls its provider with an internal key in a header fixed when
+  the proxy is created, and `Authorization` does not work for that hop (D16). The provider's upstream auth to
+  OpenRouter is still `Authorization: Bearer <OpenRouter key>`.
+- **Fresh key names.** The gateway drops a re-issued key whose name it already holds (D15), so `amp-models.sh`
+  revokes an agent's old keys and issues a new one under a timestamped name.
+
+DeepSeek sometimes answers a structured-output request in plain text instead of the tool call the Ballerina
+provider asks for ("did not return a tool call"). The workflow's agent retries absorb it.
+
+**Other models.** `./scripts/amp-models.sh openrouter --model <id>` switches to any OpenRouter model (its price is
+added to the gateway first). One assessment each (Sofia Alvarez, same question, all tools), judged by GPT-6 Luna
+(`./scripts/amp-scores.sh deepseek-v4-1-flash glm-5-3 claude-haiku-5-5`):
+
+| | DeepSeek V4.1 Flash | GLM 5.3 | Claude Haiku 5.5 |
+|---|---|---|---|
+| Whole journey, first try | yes | yes, with `maxTokens = 32768` | no: one tool loop; proposed no orderable tests |
+| Cost per assessment | $0.018 | $0.111 | $0.033 |
+| Agent time | ~2.5 min | ~6.5 min | ~2 min |
+| Copilot: helpfulness / instruction following | 0.75 / 0.65 | 0.75 / 0.92 | 0.87 / 0.25 |
+| Analysis: completeness / reasoning / clinical grounding | 0.90 / 0.70 / 0.75 | 0.98 / 0.70 / 0 | 1 / 0.82 / 1 |
+| Care plan: clarity / tone / medication safety | 0.86 / 0.66 / 0.75 | 0.75 / 0.56 / 0.75 | 0.90 / 0.73 / 1 |
+| Code checks (PHI, read-only, orderable tests, citations) | all pass | all pass | orderable tests 0; no citations |
+
+One run each, so read it as an indication. The demo uses DeepSeek: the only model that completed every step first
+time with its tools, at the lowest cost. GLM 5.3 reasons at length (raise `maxTokens`; 8192 cut it off). Mistral
+Large 4 rejects the client's `"strict": null` tool field (422); `infra/llm-auth-adapter` now drops null fields, but
+it was not re-tested.
 
 ## 4. Monitoring
 
@@ -271,7 +328,8 @@ OpenTelemetry jars (1.14) clash with the runtime's (1.65), which is another reas
 
 A **monitor** runs a set of **evaluators** over an agent's traces: continuously (`type: future`, every N
 minutes) or once over a past window (`type: past`). LLM-judge evaluators use a model through an AMP LLM
-provider (`llmProvider: {providerName: "claude-judge"}`, `model: "claude-sonnet-4-6"` as a bare name).
+provider (`llmProvider: {providerName: "openrouter-judge"}` with `model: "openai/gpt-6-luna"`, or
+`claude-judge` with `claude-sonnet-4-6`).
 Results appear on the monitor dashboard and in a **Score** column on each trace.
 
 **The judge's provider.** In AMP 1.0.0 none of the direct routes works for a Claude judge:
@@ -282,7 +340,19 @@ Results appear on the monitor dashboard and in a **Score** column on each trace.
 - **The gateway's `openai-to-anthropic-transformer`:** in gateway 1.2.1 it translates the request but not
   the reply.
 
-`amp-evaluations.sh` therefore creates `claude-judge` with three parts:
+**Judge profiles.** `amp/monitors.json` names the judge (`"judge"`), and `amp-evaluations.sh` creates that
+profile's provider and points every monitor at it (`--judge claude` overrides it for one run):
+- **`openrouter` (the default):** GPT-6 Luna (`openai/gpt-6-luna`, $0.10 / $0.50 per M tokens) through the
+  `openrouter-judge` provider: OpenAI template, upstream OpenRouter. It accepts the judge's `response_format` as
+  sent, so it needs no adapter. GPT-6 Luna reasons before it answers, so the profile raises the judges' output
+  cap (`maxTokens: 8192`; the default 1024 ran out on large traces). A review of one full assessment's traces cost
+  about $0.05.
+- **Reviews per model:** `--since <time> --until <time> --label <name>` reviews one window as `<agent>-review-<name>`,
+  kept beside other labelled reviews; `./scripts/amp-scores.sh <name>…` prints them side by side. A new review's
+  first run can miss its judge proxy (401, judges skipped; `ISSUES_TO_REPORT.md` D17): `--rerun <name>` repeats it.
+- **`claude`:** Claude Sonnet 4.6 through `claude-judge`, which needs the workarounds below.
+
+`amp-evaluations.sh` creates `claude-judge` with three parts:
 - **Template:** OpenAI, so the judge uses its working OpenAI client.
 - **Upstream:** Anthropic's OpenAI-compatible API.
 - **Policy:** `interceptor-service`, calling `infra/judge-adapter` (about 40 lines of Python), which removes
@@ -333,24 +403,21 @@ are available. An LLM-judge evaluator is a prompt template with `{trace.output}`
 
 ## 6. A ten-minute demo
 
-1. **Identity** (portal → Agent Manager): three AgentIDs, their roles, and the live permission matrix. Try
-   *Read the Cerner EHR* as the Copilot (allowed), then as the Care Plan agent (refused by Agent Manager).
-   Assign `ehr-reader` to Care Plan in the console, Re-check, Try again: allowed.
-2. **FHIR de-identification** (console → MCP proxies → fhir-cerner → policies: `mcp-fhir-deidentify`). Show
-   the table on the Agent Manager page; for proof, `./scripts/amp-setup.sh --no-fhir-policy` and back.
-3. **Run an assessment** (Physician → Sofia Alvarez → AI overview & evaluation), then follow it on the
-   **Workflow** tab: every stage live from Temporal, with tokens and cost on the AI steps and the assessment's
-   AI total in the header. The Copilot reads the EHR through the FHIR MCP proxy and cites PubMed.
-4. **Govern the spend** (portal → Agent Manager → AI cost and budgets; console → agent → model configuration).
-   `./scripts/amp-budgets.sh --exhaust care-planner`, release the lab results: the Care Plan step retries, then
-   turns red with "An AI agent could not complete its step" (429 from Agent Manager). `./scripts/amp-budgets.sh`
-   to restore, press **Retry**: the workflow completes.
+1. **Identity** (console → project → agents): three AgentIDs and their roles — `ehr-reader` on the Copilot
+   and Results Analysis, no EHR access for Care Plan.
+2. **FHIR de-identification** (console → MCP proxies → fhir-cerner → policies: `mcp-fhir-deidentify`). For
+   proof, `./scripts/amp-setup.sh --no-fhir-policy` and back.
+3. **Run an assessment** (portal home → Physician workspace → Sofia Alvarez → order labs; release results from
+   the lab console). The Results Analysis agent reads the EHR through the FHIR MCP proxy and cites PubMed.
+4. **Govern the spend** (console → agent → model configuration). `./scripts/amp-budgets.sh --exhaust care-planner`,
+   release the lab results: the Care Plan step retries, then the assessment pauses with "Daily AI budget
+   reached" and **Retry / Stop**. `./scripts/amp-budgets.sh` to restore, press **Retry**: the workflow completes.
 5. **Traces** (console → Diagnostic Copilot → Traces): the run with its LLM calls, `search`/`read` and
    `search_pubmed` tool calls, tokens and duration.
-6. **Guardrail:** `./scripts/amp-guardrails.sh --verify` — Claude can only repeat `*****` for the MRN, SSN and
+6. **Guardrail:** `./scripts/amp-guardrails.sh --verify` — the model can only repeat `*****` for the MRN, SSN and
    phone number it was sent.
 7. **Evaluation** (console → agent → Monitors): scores per evaluator over time. Open a trace to see its
-   per-evaluator scores and explanations.
+   per-evaluator scores and explanations. `./scripts/amp-scores.sh` prints the same in the terminal.
 
 ## Notes for a real deployment
 

@@ -1,4 +1,5 @@
 import ballerina/ai;
+import ballerina/http;
 import ballerina/log;
 import ballerinax/ai.memory.postgresql as aimemory;
 
@@ -58,7 +59,7 @@ the patient's name, identifiers or dates. Prefer recent reviews and guidelines (
 what you used as [PMID 12345678] next to the statement it supports; never cite an article you did not retrieve.
 Use at most two searches.`;
 
-final string COPILOT_INSTRUCTIONS = string `You help a preventive and longevity medicine physician evaluate a patient and decide which biomarkers to measure.
+final string COPILOT_INSTRUCTIONS = string `You help a preventive medicine physician evaluate a patient and decide which biomarkers to measure.
 
 You receive the patient's context (problems, allergies, current medications, family history, vitals, rule-based flags and care gaps), the EHR records the physician selected in the data explorer (encounters, problems, medications, lab results, vitals, notes…) with the date range they looked at, and the physician's question.
 
@@ -76,13 +77,13 @@ You receive the patient's context (problems, allergies, current medications, fam
 
 When the physician replies or asks a follow-up, answer it in "reply", revise the rest only where it changes, and say what changed in "reasoningNote".`;
 
-final string ANALYST_INSTRUCTIONS = string `You interpret a patient's new lab results for a longevity physician, in the context of their EHR history.
+final string ANALYST_INSTRUCTIONS = string `You interpret a patient's new lab results for a preventive medicine physician, in the context of their EHR history.
 
 You receive the patient's EHR summary, the physician's reason for the order and the Copilot's evaluation, the tests ordered, and the new results from the lab (with the lab's reference ranges).
 
 ## What to do
 1. For every new result, classify it:
-   - "optimal": meets the clinic's longevity target (get_lab_catalog lists targets per analyte).
+   - "optimal": meets the clinic's target (get_lab_catalog lists targets per analyte).
    - "normal": inside the lab reference range but not at target.
    - "borderline": at the edge of the reference range or clearly trending the wrong way.
    - "out-of-range": outside the lab reference range.
@@ -266,10 +267,10 @@ isolated function carePlannerAgent() returns ai:Agent|error {
 
 # Lists what the clinic can order from the lab.
 #
-# + return - the orderable tests and, for every analyte, its LOINC code, unit and longevity target
+# + return - the orderable tests and, for every analyte, its LOINC code, unit and target
 @ai:AgentTool {
     name: "get_lab_catalog",
-    description: "Lists the tests the clinic can order from the lab (code, name, analytes, purpose, preparation) and, for every analyte, its LOINC code, unit and the clinic's longevity target."
+    description: "Lists the tests the clinic can order from the lab (code, name, analytes, purpose, preparation) and, for every analyte, its LOINC code, unit and the clinic's target."
 }
 isolated function getLabCatalog() returns json {
     return {
@@ -497,14 +498,42 @@ isolated function withCatalogTestsOnly(CopilotEvaluation evaluation) returns Cop
 isolated function compactAgentError(string agentName, error err) returns error {
     log:printError(string `${agentName} failed`, err);
     string reason = err.message();
+    string? gateway = gatewayReply(err);
     var steps = err.detail()["steps"];
     if steps is (ai:ExecutionResult|ai:ExecutionError|ai:Error)[] && steps.length() > 0 {
         ai:ExecutionResult|ai:ExecutionError|ai:Error last = steps[steps.length() - 1];
         if last is ai:Error {
             reason += ": " + last.message();
+            gateway = gateway ?: gatewayReply(last);
         } else if last is ai:ExecutionError {
             reason += ": " + last.'error.message();
+            gateway = gateway ?: gatewayReply(last.'error);
         }
     }
+    if gateway is string {
+        reason += " · " + gateway;
+    }
     return error(reason.length() > 1000 ? reason.substring(0, 1000) : reason);
+}
+
+# The HTTP reply behind a failed model call, as "AI gateway HTTP 429: <body>", from the error's cause
+# chain. The model provider reports any non-2xx as "Unexpected response format"; the status is what tells
+# a budget refusal (429) from a permission refusal (401/403) or a timeout (503/504), and the portal
+# explains each.
+#
+# + err - an agent or model-provider error
+# + return - the status and the start of the reply body, or () when no HTTP reply is in the chain
+isolated function gatewayReply(error err) returns string? {
+    error? current = err;
+    while current is error {
+        if current is http:ApplicationResponseError {
+            var detail = current.detail();
+            anydata body = detail.body;
+            string text = body is string ? body : body.toString();
+            text = re `\s+`.replaceAll(text, " ").trim();
+            return string `AI gateway HTTP ${detail.statusCode}: ${text.length() > 200 ? text.substring(0, 200) : text}`;
+        }
+        current = current.cause();
+    }
+    return ();
 }
